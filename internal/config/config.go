@@ -2,10 +2,9 @@ package config
 
 import (
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
+// Config holds all application configuration
 type Config struct {
 	Port                string
 	DBUser              string
@@ -21,9 +20,8 @@ type Config struct {
 	StripeWebhookSecret string
 }
 
+// LoadConfig loads configuration from environment variables
 func LoadConfig() *Config {
-	_ = godotenv.Load() // Ignore error if .env not found (system env vars)
-
 	return &Config{
 		Port:                getEnv("PORT", "8080"),
 		DBUser:              getEnv("DB_USER", "paylink"),

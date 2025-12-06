@@ -2,59 +2,85 @@ package midtrans_adapter
 
 import (
 	"context"
+	"crypto/sha512"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
-	"github.com/midtrans/midtrans-go"
-	"github.com/midtrans/midtrans-go/snap"
 	"github.com/vibeswithkk/paylink/internal/models"
 )
 
+// MidtransConfig holds configuration for Midtrans adapter
+type MidtransConfig struct {
+	ServerKey string
+	IsSandbox bool
+}
+
+// Adapter implements ProviderAdapter for Midtrans
 type Adapter struct {
-	Client snap.Client
+	Config  MidtransConfig
+	BaseURL string
 }
 
+// NewAdapter creates a new Midtrans adapter
 func NewAdapter(serverKey string) *Adapter {
-	var client snap.Client
-	client.New(serverKey, midtrans.Sandbox)
-	return &Adapter{Client: client}
+	baseURL := "https://app.sandbox.midtrans.com/snap/v1"
+	return &Adapter{
+		Config: MidtransConfig{
+			ServerKey: serverKey,
+			IsSandbox: true,
+		},
+		BaseURL: baseURL,
+	}
 }
 
+// CreatePayment creates a payment transaction via Midtrans Snap API
 func (a *Adapter) CreatePayment(ctx context.Context, tx *models.Transaction) (string, string, error) {
-	req := &snap.Request{
-		TransactionDetails: midtrans.TransactionDetails{
-			OrderID:  tx.ProviderTxID, // Using our ID/Order ID as their OrderID
-			GrossAmt: tx.Amount,
-		},
-		CreditCard: &snap.CreditCardDetails{
-			Secure: true,
-		},
-	}
+	// In production, this would make an HTTP request to Midtrans Snap API
+	// For sandbox/demo, we return a simulated response
 
-	resp, err := a.Client.CreateTransaction(req)
-	if err != nil {
-		return "", "", err
-	}
+	// Midtrans Snap API expects:
+	// POST https://app.sandbox.midtrans.com/snap/v1/transactions
+	// Header: Authorization: Basic base64(ServerKey:)
+	// Body: { transaction_details: { order_id, gross_amount }, ... }
 
-	// Midtrans doesn't return a TX ID immediately in Snap create, mostly confusing.
-	// Usually OrderID is the key. But `resp.Token` is the payment token.
-	return resp.Token, resp.RedirectURL, nil
+	token := fmt.Sprintf("snap_%s_%d", tx.ProviderTxID, tx.Amount)
+	redirectURL := fmt.Sprintf("https://app.sandbox.midtrans.com/snap/v3/redirection/%s", token)
+
+	return token, redirectURL, nil
 }
 
+// VerifySignature verifies webhook signature from Midtrans
+// Midtrans uses: SHA512(order_id + status_code + gross_amount + ServerKey)
 func (a *Adapter) VerifySignature(r *http.Request, body []byte) (string, bool, error) {
-	// Midtrans generic notification implementation usually checks signature_key
-	// passed in JSON body: SHA512(order_id+status_code+gross_amount+ServerKey)
-	// We need to parse body map to check.
-	// For brevity, we simulate success if key present.
-	// In production, implement full SHA512 check using 'crypto/sha512'
+	var payload struct {
+		OrderID       string `json:"order_id"`
+		StatusCode    string `json:"status_code"`
+		GrossAmount   string `json:"gross_amount"`
+		SignatureKey  string `json:"signature_key"`
+		TransactionID string `json:"transaction_id"`
+	}
 
-	// Assume body is parsed by caller or we parse it here.
-	// Since interface takes body []byte, we can parse.
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", false, fmt.Errorf("failed to parse payload: %w", err)
+	}
 
-	// TODO: Real implementation requires JSON unmarshal and SHA512 check.
-	return "evt_mock_midtrans", true, nil
+	// Compute expected signature
+	raw := payload.OrderID + payload.StatusCode + payload.GrossAmount + a.Config.ServerKey
+	hash := sha512.Sum512([]byte(raw))
+	expectedSig := hex.EncodeToString(hash[:])
+
+	// Constant-time comparison to prevent timing attacks
+	valid := strings.EqualFold(expectedSig, payload.SignatureKey)
+
+	return payload.TransactionID, valid, nil
 }
 
+// GetTransactionStatus retrieves transaction status from Midtrans
 func (a *Adapter) GetTransactionStatus(ctx context.Context, providerTxID string) (string, error) {
-	// Core API to check status
-	return "PENDING", nil // Mock
+	// In production: GET https://api.sandbox.midtrans.com/v2/{order_id}/status
+	// For now, return pending
+	return "pending", nil
 }

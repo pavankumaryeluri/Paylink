@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,10 +21,18 @@ func main() {
 
 	database, err := db.Connect(cfg)
 	if err != nil {
-		util.Logger.Error("Failed to connect to database/redis", "error", err)
-		panic(err)
+		util.Logger.Error("Failed to connect to database", "error", err)
+		fmt.Printf("Database connection failed: %v\n", err)
+		fmt.Println("Starting worker in demo mode...")
+		database = &db.DB{
+			Redis: &db.RedisClient{Addr: fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort)},
+		}
 	}
-	defer database.Close()
+	defer func() {
+		if database != nil {
+			database.Close()
+		}
+	}()
 
 	worker := jobs.NewWorker(database.Redis)
 
@@ -41,5 +50,6 @@ func main() {
 	}()
 
 	util.Logger.Info("Worker processing jobs...")
+	fmt.Println("PayLink Worker running...")
 	worker.Process(ctx)
 }

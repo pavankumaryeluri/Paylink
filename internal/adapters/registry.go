@@ -8,6 +8,7 @@ import (
 	"github.com/vibeswithkk/paylink/internal/config"
 )
 
+// NewAdapter creates a provider adapter based on the provider name
 func NewAdapter(provider string, cfg *config.Config) (ProviderAdapter, error) {
 	switch provider {
 	case "midtrans":

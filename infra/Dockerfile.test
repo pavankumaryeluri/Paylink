@@ -1,0 +1,13 @@
+# Simple test Dockerfile
+FROM golang:1.22-alpine
+
+WORKDIR /app
+
+# Copy source
+COPY . .
+
+# Download dependencies
+RUN go mod download
+
+# Run tests (disable CGO for pure Go build)
+CMD ["go", "test", "-v", "./..."]

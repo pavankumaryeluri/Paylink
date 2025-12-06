@@ -6,24 +6,28 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/vibeswithkk/paylink/internal/db"
 )
 
 const WebhookQueueKey = "queue:webhooks"
 
+// WebhookJob represents a webhook processing job
 type WebhookJob struct {
 	Provider string          `json:"provider"`
 	Payload  json.RawMessage `json:"payload"`
 }
 
+// Enqueuer handles job enqueueing
 type Enqueuer struct {
-	Redis *redis.Client
+	Redis *db.RedisClient
 }
 
-func NewEnqueuer(r *redis.Client) *Enqueuer {
+// NewEnqueuer creates a new job enqueuer
+func NewEnqueuer(r *db.RedisClient) *Enqueuer {
 	return &Enqueuer{Redis: r}
 }
 
+// EnqueueWebhook adds a webhook job to the queue
 func (e *Enqueuer) EnqueueWebhook(ctx context.Context, provider string, payload []byte) error {
 	job := WebhookJob{
 		Provider: provider,
@@ -33,30 +37,34 @@ func (e *Enqueuer) EnqueueWebhook(ctx context.Context, provider string, payload 
 	if err != nil {
 		return err
 	}
-	return e.Redis.LPush(ctx, WebhookQueueKey, data).Err()
+	return e.Redis.LPush(ctx, WebhookQueueKey, data)
 }
 
+// Worker processes jobs from the queue
 type Worker struct {
-	Redis *redis.Client
+	Redis *db.RedisClient
 }
 
-func NewWorker(r *redis.Client) *Worker {
+// NewWorker creates a new job worker
+func NewWorker(r *db.RedisClient) *Worker {
 	return &Worker{Redis: r}
 }
 
+// Process continuously processes jobs from the queue
 func (w *Worker) Process(ctx context.Context) {
 	for {
-		// BLPOP with 5 second timeout
-		res, err := w.Redis.BLPop(ctx, 5*time.Second, WebhookQueueKey).Result()
-		if err != nil {
-			if err != redis.Nil {
-				// Log error (needs logger)
-				// fmt.Println("Error popping:", err)
-			}
+		select {
+		case <-ctx.Done():
+			fmt.Println("Worker shutting down...")
+			return
+		default:
+		}
+
+		res, err := w.Redis.BLPop(ctx, 5*time.Second, WebhookQueueKey)
+		if err != nil || len(res) < 2 {
 			continue
 		}
 
-		// res[0] is key, res[1] is value
 		var job WebhookJob
 		if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
 			fmt.Printf("Failed to unmarshal job: %v\n", err)
@@ -69,7 +77,6 @@ func (w *Worker) Process(ctx context.Context) {
 
 func (w *Worker) handleJob(ctx context.Context, job *WebhookJob) {
 	fmt.Printf("Processing webhook for %s: %s\n", job.Provider, string(job.Payload))
-	// Here you would call the reconciliation or business logic updates
-	// For now, simulate work
+	// Simulate processing time
 	time.Sleep(100 * time.Millisecond)
 }

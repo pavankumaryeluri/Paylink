@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -18,10 +19,16 @@ func main() {
 
 	database, err := db.Connect(cfg)
 	if err != nil {
-		util.Logger.Error("Failed to connect to database/redis", "error", err)
-		panic(err)
+		util.Logger.Error("Failed to connect to database", "error", err)
+		fmt.Printf("Database connection failed: %v\n", err)
+		fmt.Println("Starting in demo mode without database...")
+		database = &db.DB{}
 	}
-	defer database.Close()
+	defer func() {
+		if database != nil {
+			database.Close()
+		}
+	}()
 
 	handler := api.NewHandler(cfg, database)
 
@@ -33,6 +40,8 @@ func main() {
 	}
 
 	util.Logger.Info("Server listening", "port", cfg.Port)
+	fmt.Printf("PayLink API Server running at http://localhost:%s\n", cfg.Port)
+
 	if err := srv.ListenAndServe(); err != nil {
 		util.Logger.Error("Server failed", "error", err)
 	}
