@@ -1,301 +1,353 @@
-PayLink adalah backend modular untuk mengelola proses pembayaran lintas provider (Midtrans, Xendit, Stripe, dsb).
-Dirancang seperti sistem produksi di perusahaan fintech: aman, scalable, observability-ready, dan mudah diintegrasikan.
-
-Proyek ini mencakup:
-
-Multi-provider Payment Adapter Architecture
-
-Secure Webhook Handler (signature validation + idempotency)
+# PayLink
+
+**Multi-Provider Payment Gateway Backend**
+
+PayLink is a production-grade payment orchestration service that provides a unified API for creating payment checkouts across multiple payment providers. Built with Go for high performance and reliability.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+- [API Reference](#api-reference)
+- [Development](#development)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Security](#security)
+- [Contributing](#contributing)
+- [License](#license)
 
-C++ Crypto Shared Library (diakses via cgo) untuk operasi signing/verification berperforma tinggi
+---
 
-Background Workers untuk reconciliation & event processing
+## Overview
 
-PostgreSQL untuk transaksi
+PayLink abstracts the complexity of integrating multiple payment providers into a single, consistent API. Whether you are processing payments through Midtrans, Xendit, or Stripe, PayLink handles the provider-specific logic, webhook verification, and transaction management.
 
-Redis untuk idempotency keys & rate limiting
+### Key Benefits
 
-OpenAPI spec, Postman, dan struktur folder enterprise
+| Benefit | Description |
+|---------|-------------|
+| Provider Agnostic | Single API interface for all payment providers |
+| Webhook Management | Automatic signature verification and idempotent processing |
+| Horizontal Scaling | Stateless design supports multiple instances |
+| Observable | Structured logging and metrics-ready architecture |
+| Secure | Constant-time signature verification, no secrets in code |
 
-Semua berjalan tanpa VPS, cukup menggunakan Docker Compose di Linux Ubuntu.
+---
 
-🧱 Architecture
-      [ Client ]
-          |
-          v
- ┌───────────────────────────┐
- │       PayLink API         │  <-- Go HTTP Server (REST)
- │  - Checkout creation      │
- │  - Provider adapters      │
- │  - Webhook router         │
- │  - Auth + rate limit      │
- └───────────┬──────────────┘
-             |
-             | cgo (batched calls)
-             v
-      [ C++ Crypto Module ]
-        - HMAC / signing
-        - Heavy crypto ops
+## Features
 
- ┌───────────────┐   ┌────────────────┐
- │   Postgres     │   │     Redis      │
- │ transactions   │   │ idempotency    │
- │ webhook logs   │   │ rate limiting  │
- └───────────────┘   └────────────────┘
+### Core Capabilities
 
-            ┌─────────────────────────┐
-            │  Background Workers     │
-            │ - webhook processor     │
-            │ - reconciliation jobs   │
-            └─────────────────────────┘
+- **Unified Checkout API** - Create payment sessions with any supported provider
+- **Webhook Processing** - Secure, idempotent webhook handling with async job processing
+- **Transaction Management** - Query transaction status across providers
+- **Background Workers** - Asynchronous job processing for webhooks and reconciliation
 
+### Supported Providers
 
-🔧 Tech Stack
+| Provider | Status | Documentation |
+|----------|--------|---------------|
+| Midtrans | Supported | [Midtrans Docs](https://docs.midtrans.com/) |
+| Xendit | Supported | [Xendit Docs](https://developers.xendit.co/) |
+| Stripe | Planned | [Stripe Docs](https://stripe.com/docs) |
 
-Go 1.22+ (HTTP server, adapters, worker)
+---
 
-C++17 (native crypto; compiled as shared library)
+## Architecture
 
-PostgreSQL 16
+```
+                                    Client Request
+                                          |
+                                          v
++-------------------------------------------------------------------------+
+|                            PayLink API Server                           |
+|                                                                         |
+|   +-------------+    +-------------+    +-------------+                 |
+|   |   Routes    | -> | Middleware  | -> |  Handlers   |                 |
+|   +-------------+    +-------------+    +-------------+                 |
+|                              |                                          |
+|                              v                                          |
+|   +-------------------------------------------------------------+       |
+|   |                     Adapter Layer                           |       |
+|   |   +-----------+   +-----------+   +-----------+             |       |
+|   |   | Midtrans  |   |  Xendit   |   |  Stripe   |             |       |
+|   |   +-----------+   +-----------+   +-----------+             |       |
+|   +-------------------------------------------------------------+       |
++-------------------------------------------------------------------------+
+         |                    |                         |
+         v                    v                         v
+   +-----------+        +-----------+        +-------------------+
+   | PostgreSQL|        |   Redis   |        | Payment Providers |
+   +-----------+        +-----------+        +-------------------+
+```
 
-Redis 7
+### Components
 
-Docker & Docker Compose
+| Component | Purpose |
+|-----------|---------|
+| API Server | HTTP request handling and routing |
+| Adapters | Provider-specific payment logic |
+| Worker | Async webhook and reconciliation processing |
+| PostgreSQL | Transaction and webhook storage |
+| Redis | Job queue and idempotency keys |
 
-OpenTelemetry + Prometheus (optional)
+For detailed architecture information, see [docs/architecture.md](docs/architecture.md).
 
-Ubuntu Linux development environment
+---
 
-📂 Directory Structure
-paylink/
-├─ cmd/
-│  └─ server/
-│       └─ main.go
-├─ internal/
-│  ├─ api/         # HTTP routes, handlers, validators
-│  ├─ adapters/    # midtrans/, xendit/, stripe/
-│  ├─ crypto/      # cgo wrapper around C++ lib
-│  ├─ db/          # SQL queries, migrations
-│  ├─ jobs/        # workers & queue consumers
-│  ├─ webhook/     # webhook validators + router
-│  └─ util/        # logging, metrics, idempotency
-├─ crypto_cpp/
-│  ├─ src/
-│  ├─ include/
-│  └─ CMakeLists.txt
-├─ infra/
-│  ├─ docker-compose.yml
-│  ├─ Dockerfile.server
-│  └─ Dockerfile.worker
-├─ migrations/
-│  └─ *.sql
-├─ docs/
-│  ├─ api.yaml         # OpenAPI 3.0
-│  ├─ architecture.md
-│  └─ postman_collection.json
-└─ README.md
+## Getting Started
 
-📝 Features
-✔ Multi-Provider Payment Integration
+### Prerequisites
 
-PayLink menyediakan interface adapter yang memudahkan integrasi provider baru tanpa mengubah core system.
-Provider yang tersedia:
+- Docker and Docker Compose
+- Git
 
-Midtrans (sandbox)
+### Quick Start
 
-Xendit (test mode)
+1. **Clone the repository**
 
-Stripe (test mode)
+```bash
+git clone https://github.com/vibeswithkk/Paylink.git
+cd Paylink
+```
 
-Easily pluggable adapter pattern
+2. **Configure environment**
 
-✔ Secure Webhook System
-
-Signature verification (HMAC/SHA256)
-
-Constant-time comparison (anti-timing attack)
-
-Error-safe parsing
-
-Idempotency key system (Redis + PostgreSQL)
-
-Duplicate event handling
-
-Asynchronous processing
-
-✔ C++ Native Crypto Module
-
-Untuk operasi berat (signing, verification), PayLink menggunakan modul C++ (dipanggil via cgo) sebagai shared library:
-
-libpaycrypto.so
-
-
-Benefit:
-
-High-performance native operations
-
-Suitable for large payload signing
-
-Minimizes Go-side CPU cost
-
-✔ Background Workers
-
-Webhook processing
-
-Retry jobs
-
-Reconciliation (pull provider status)
-
-✔ Observability
-
-/metrics endpoint (Prometheus)
-
-OpenTelemetry traces (Jaeger)
-
-Structured logging (JSON)
-
-🔌 API Endpoints
-POST /v1/checkout
-
-Membuat transaksi dan mengembalikan checkout URL provider.
-
-POST /v1/webhook/{provider}
-
-Menerima callback dari provider payment.
-
-GET /v1/tx/{id}
-
-Mengecek status transaksi.
-
-POST /v1/reconcile
-
-Menjalankan reconciliation worker.
-
-Dokumentasi lengkap: lihat docs/api.yaml.
-
-🗄 Database Design
-transactions
-field	type
-id	UUID
-merchant_id	UUID
-provider	TEXT
-provider_tx_id	TEXT
-amount	BIGINT
-currency	TEXT
-status	TEXT
-metadata	JSONB
-created_at	TIMESTAMP
-webhook_events
-field	type
-id	UUID
-provider	TEXT
-event_id	TEXT UNIQUE
-payload	JSONB
-processed	BOOL
-idempotency_keys
-
-| key | TEXT PRIMARY KEY
-| response_snapshot | JSONB
-
-🐳 Running Locally (Ubuntu)
-1. Clone project
-git clone https://github.com/username/paylink.git
-cd paylink
-
-2. Create environment file
+```bash
 cp .env.example .env
+# Edit .env with your provider credentials
+```
 
-3. Start everything
-docker compose up --build
+3. **Start services**
 
-4. API available at:
-http://localhost:8080
+```bash
+docker compose -f infra/docker-compose.yml up --build
+```
 
-🔐 Security Highlights
+4. **Verify installation**
 
-Signature verification for all webhooks
+```bash
+curl http://localhost:8080/health
+# Expected: {"status":"ok"}
+```
 
-HMAC constant-time comparison
+---
 
-Idempotent transaction updates
+## Configuration
 
-Sanitize & validate incoming payloads
+PayLink is configured via environment variables. Copy `.env.example` to `.env` and update the values.
 
-API-key protected merchant endpoints
+### Environment Variables
 
-Rate-limiting (Redis token bucket)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | HTTP server port | `8080` |
+| `DB_HOST` | PostgreSQL host | `localhost` |
+| `DB_PORT` | PostgreSQL port | `5432` |
+| `DB_USER` | PostgreSQL user | `paylink` |
+| `DB_PASSWORD` | PostgreSQL password | `secret` |
+| `DB_NAME` | PostgreSQL database | `paylink` |
+| `REDIS_HOST` | Redis host | `localhost` |
+| `REDIS_PORT` | Redis port | `6379` |
+| `MIDTRANS_SERVER_KEY` | Midtrans server key | - |
+| `XENDIT_API_KEY` | Xendit API key | - |
+| `STRIPE_SECRET_KEY` | Stripe secret key | - |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook secret | - |
 
-🧪 Testing
-Unit Tests
-go test ./...
+---
 
-Integration Tests
+## API Reference
 
-Runs Postgres + Redis containers:
+### Endpoints
 
-docker compose -f infra/docker-compose.test.yml up --build
+#### Create Checkout
 
-E2E Webhook Testing
-ngrok http 8080
+Creates a new payment checkout session.
 
+```
+POST /v1/checkout
+Content-Type: application/json
+```
 
-Set URL di sandbox provider (Midtrans/Xendit/Stripe).
+**Request Body**
 
-🛠 Build C++ Crypto Library
-Build manually on Ubuntu:
-cd crypto_cpp
-mkdir build && cd build
-cmake ..
-make
-
-
-Output:
-
-libpaycrypto.so
-
-🧩 Adding New Payment Providers
-
-Tambahkan folder:
-
-internal/adapters/<provider>/
-
-
-Implement interface:
-
-type ProviderAdapter interface {
-   CreatePayment(...)
-   VerifySignature(...)
-   GetTransactionStatus(...)
+```json
+{
+    "merchant_id": "550e8400-e29b-41d4-a716-446655440000",
+    "amount": 150000,
+    "currency": "IDR",
+    "order_id": "ORDER-123",
+    "provider_preference": "midtrans"
 }
+```
 
+**Response**
 
-Register provider di adapters/registry.go.
+```json
+{
+    "checkout_url": "https://app.sandbox.midtrans.com/snap/v3/redirection/...",
+    "provider_tx_id": "snap_ORDER-123_150000"
+}
+```
 
-🚦 CI / CD
+#### Receive Webhook
 
-GitHub Actions pipeline meliputi:
+Receives and processes webhooks from payment providers.
 
-lint (golangci-lint)
+```
+POST /v1/webhook/{provider}
+```
 
-build Go server & worker
+#### Get Transaction
 
-build C++ native module (CMake)
+Retrieves transaction status.
 
-run unit tests
+```
+GET /v1/tx/{id}
+```
 
-run integration tests (Docker)
+#### Health Check
 
-produce Docker images
+Returns service health status.
 
-📜 License
+```
+GET /health
+```
 
-MIT License.
+For complete API documentation, see [docs/api.yaml](docs/api.yaml).
 
-🎯 Status
+---
 
-Active Development
-Roadmap: Doku adapter, PayPal, multi-tenant merchant keys, OpenTelemetry tracing pipeline.
+## Development
 
-🙌 Credits
+### Project Structure
 
-Arsitektur terinspirasi dari pola backend fintech modern (Stripe, Xendit, Go microservices), praktik industri cloud-native, dan referensi open-source dari GitHub ecosystem.
+```
+paylink/
+├── cmd/
+│   ├── server/          # API server entry point
+│   └── worker/          # Background worker entry point
+├── internal/
+│   ├── api/             # HTTP handlers
+│   ├── adapters/        # Provider implementations
+│   ├── config/          # Configuration
+│   ├── crypto/          # Cryptographic utilities
+│   ├── db/              # Database layer
+│   ├── jobs/            # Job queue
+│   ├── models/          # Data models
+│   └── util/            # Utilities
+├── crypto_cpp/          # C++ crypto module (optional)
+├── infra/               # Docker and infrastructure
+├── migrations/          # Database migrations
+└── docs/                # Documentation
+```
+
+### Building from Source
+
+```bash
+# Build API server
+go build -o bin/server ./cmd/server
+
+# Build worker
+go build -o bin/worker ./cmd/worker
+```
+
+### Adding a New Provider
+
+1. Create adapter directory: `internal/adapters/{provider}/`
+2. Implement `ProviderAdapter` interface
+3. Register provider in `internal/adapters/registry.go`
+
+---
+
+## Testing
+
+### Run Unit Tests
+
+```bash
+# Using Docker
+docker build -f infra/Dockerfile.test -t paylink-test .
+docker run --rm paylink-test
+
+# Using Go directly
+go test -v ./...
+```
+
+### Test Coverage
+
+```bash
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+---
+
+## Deployment
+
+### Docker Compose (Development)
+
+```bash
+docker compose -f infra/docker-compose.yml up --build
+```
+
+### Docker Compose (Production)
+
+```bash
+docker compose -f infra/docker-compose.yml up -d
+```
+
+### Kubernetes
+
+Helm charts and Kubernetes manifests are planned for future releases.
+
+---
+
+## Security
+
+### Webhook Verification
+
+All incoming webhooks are verified using provider-specific signature algorithms:
+
+| Provider | Algorithm |
+|----------|-----------|
+| Midtrans | SHA512(order_id + status_code + gross_amount + ServerKey) |
+| Xendit | x-callback-token header verification |
+| Stripe | HMAC-SHA256 with webhook secret |
+
+### Best Practices
+
+- Store credentials in environment variables or secret managers
+- Use HTTPS for all external communications
+- Enable rate limiting in production
+- Rotate API keys periodically
+- Review audit logs regularly
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make changes with tests
+4. Submit a pull request
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## Support
+
+For issues and feature requests, please open a GitHub issue.
+
+---
+
+*PayLink is maintained by the development team.*
