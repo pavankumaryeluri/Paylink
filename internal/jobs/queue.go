@@ -76,6 +76,14 @@ func (w *Worker) Process(ctx context.Context) {
 }
 
 func (w *Worker) handleJob(ctx context.Context, job *WebhookJob) {
+	// Check context before processing
+	select {
+	case <-ctx.Done():
+		fmt.Println("Job cancelled")
+		return
+	default:
+	}
+
 	fmt.Printf("Processing webhook for %s: %s\n", job.Provider, string(job.Payload))
 	// Simulate processing time
 	time.Sleep(100 * time.Millisecond)
