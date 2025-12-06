@@ -1,0 +1,226 @@
+{
+    "info": {
+        "_postman_id": "paylink-api-collection",
+        "name": "PayLink API",
+        "description": "Multi-provider payment gateway API collection",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:8080",
+            "type": "string"
+        },
+        {
+            "key": "apiKey",
+            "value": "your-api-key-here",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "System",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/health",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "health"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Metrics",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/metrics",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "metrics"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Checkout",
+            "item": [
+                {
+                    "name": "Create Checkout - Midtrans",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "X-Api-Key",
+                                "value": "{{apiKey}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"merchant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"amount\": 150000,\n  \"currency\": \"IDR\",\n  \"order_id\": \"ORDER-123\",\n  \"provider_preference\": \"midtrans\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/checkout",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "checkout"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Create Checkout - Xendit",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "X-Api-Key",
+                                "value": "{{apiKey}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"merchant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"amount\": 250000,\n  \"currency\": \"IDR\",\n  \"order_id\": \"ORDER-456\",\n  \"provider_preference\": \"xendit\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/checkout",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "checkout"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Transactions",
+            "item": [
+                {
+                    "name": "Get Transaction",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "X-Api-Key",
+                                "value": "{{apiKey}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/tx/ORDER-123",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "tx",
+                                "ORDER-123"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Webhooks",
+            "item": [
+                {
+                    "name": "Simulate Midtrans Webhook",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"order_id\": \"ORDER-123\",\n  \"status_code\": \"200\",\n  \"gross_amount\": \"150000.00\",\n  \"signature_key\": \"your-signature-here\",\n  \"transaction_id\": \"tx-456\",\n  \"transaction_status\": \"settlement\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/webhook/midtrans",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "webhook",
+                                "midtrans"
+                            ]
+                        }
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Simulate Xendit Webhook",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "x-callback-token",
+                                "value": "your-callback-token"
+                            },
+                            {
+                                "key": "webhook-id",
+                                "value": "evt-123"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"id\": \"inv_123\",\n  \"external_id\": \"ORDER-456\",\n  \"status\": \"PAID\",\n  \"amount\": 250000\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/v1/webhook/xendit",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "v1",
+                                "webhook",
+                                "xendit"
+                            ]
+                        }
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ]
+}

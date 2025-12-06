@@ -270,7 +270,7 @@ go build -o bin/worker ./cmd/worker
 ### Run Unit Tests
 
 ```bash
-# Using Docker
+# Using Docker (recommended)
 docker build -f infra/Dockerfile.test -t paylink-test .
 docker run --rm paylink-test
 
@@ -284,6 +284,107 @@ go test -v ./...
 go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
+
+### Integration Tests
+
+Integration tests require running services:
+
+```bash
+# Start services
+docker compose -f infra/docker-compose.yml up -d db redis
+
+# Run integration tests
+go test -v -tags=integration ./...
+
+# Cleanup
+docker compose -f infra/docker-compose.yml down
+```
+
+### Webhook Testing with Sandbox
+
+1. Start PayLink locally
+2. Expose local server via ngrok: `ngrok http 8080`
+3. Configure webhook URL in provider sandbox dashboard
+4. Trigger test payment in sandbox
+5. Verify webhook received in PayLink logs
+
+---
+
+## Operations
+
+### Metrics
+
+PayLink exposes Prometheus-compatible metrics at `/metrics`:
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+**Available Metrics:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `paylink_uptime_seconds` | Gauge | Time since server start |
+| `paylink_requests_total` | Counter | Total requests by status |
+| `paylink_checkouts_total` | Counter | Total checkouts created |
+| `paylink_checkouts_by_provider` | Counter | Checkouts by provider |
+| `paylink_webhooks_total` | Counter | Webhooks by status |
+| `paylink_latency_avg_ms` | Gauge | Average request latency |
+
+### Prometheus Configuration
+
+Add to `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'paylink'
+    static_configs:
+      - targets: ['paylink:8080']
+```
+
+### Logging
+
+PayLink uses structured JSON logging:
+
+```json
+{
+  "time": "2024-12-06T10:00:00Z",
+  "level": "INFO",
+  "msg": "Checkout created",
+  "provider": "midtrans",
+  "order_id": "ORDER-123",
+  "amount": 150000
+}
+```
+
+**Log Levels:**
+- `INFO` - Normal operations
+- `WARN` - Recoverable issues (invalid signatures, validation failures)
+- `ERROR` - Failures requiring attention
+
+### Health Checks
+
+```bash
+# Liveness probe
+curl http://localhost:8080/health
+
+# Expected response
+{"status":"ok"}
+```
+
+### Error Handling
+
+See [docs/error_handling.md](docs/error_handling.md) for:
+- Retry logic configuration
+- Fallback behavior
+- Dead letter queue handling
+
+### Security
+
+See [docs/security.md](docs/security.md) for:
+- Webhook signature verification
+- Input validation
+- OWASP compliance
 
 ---
 

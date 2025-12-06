@@ -7,14 +7,21 @@ import (
 	"time"
 
 	"github.com/vibeswithkk/paylink/internal/db"
+	"github.com/vibeswithkk/paylink/internal/util"
 )
 
-const WebhookQueueKey = "queue:webhooks"
+const (
+	WebhookQueueKey = "queue:webhooks"
+	MaxRetries      = 3
+	RetryDelay      = 5 * time.Second
+)
 
 // WebhookJob represents a webhook processing job
 type WebhookJob struct {
-	Provider string          `json:"provider"`
-	Payload  json.RawMessage `json:"payload"`
+	Provider  string          `json:"provider"`
+	Payload   json.RawMessage `json:"payload"`
+	Retries   int             `json:"retries"`
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 // Enqueuer handles job enqueueing
@@ -30,14 +37,28 @@ func NewEnqueuer(r *db.RedisClient) *Enqueuer {
 // EnqueueWebhook adds a webhook job to the queue
 func (e *Enqueuer) EnqueueWebhook(ctx context.Context, provider string, payload []byte) error {
 	job := WebhookJob{
-		Provider: provider,
-		Payload:  payload,
+		Provider:  provider,
+		Payload:   payload,
+		Retries:   0,
+		CreatedAt: time.Now(),
 	}
 	data, err := json.Marshal(job)
 	if err != nil {
+		util.Logger.Error("Failed to marshal webhook job", "error", err)
 		return err
 	}
-	return e.Redis.LPush(ctx, WebhookQueueKey, data)
+
+	err = e.Redis.LPush(ctx, WebhookQueueKey, data)
+	if err != nil {
+		util.Logger.Error("Failed to enqueue webhook", "error", err)
+		return err
+	}
+
+	util.Logger.Info("Webhook job enqueued",
+		"provider", provider,
+		"queue", WebhookQueueKey)
+
+	return nil
 }
 
 // Worker processes jobs from the queue
@@ -52,10 +73,12 @@ func NewWorker(r *db.RedisClient) *Worker {
 
 // Process continuously processes jobs from the queue
 func (w *Worker) Process(ctx context.Context) {
+	util.Logger.Info("Worker started processing jobs")
+
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("Worker shutting down...")
+			util.Logger.Info("Worker shutting down gracefully")
 			return
 		default:
 		}
@@ -67,24 +90,85 @@ func (w *Worker) Process(ctx context.Context) {
 
 		var job WebhookJob
 		if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
-			fmt.Printf("Failed to unmarshal job: %v\n", err)
+			util.Logger.Error("Failed to unmarshal job", "error", err)
 			continue
 		}
 
-		w.handleJob(ctx, &job)
+		w.handleJobWithRetry(ctx, &job)
 	}
 }
 
-func (w *Worker) handleJob(ctx context.Context, job *WebhookJob) {
+func (w *Worker) handleJobWithRetry(ctx context.Context, job *WebhookJob) {
+	err := w.handleJob(ctx, job)
+	if err != nil {
+		if job.Retries < MaxRetries {
+			job.Retries++
+			util.Logger.Warn("Job failed, scheduling retry",
+				"provider", job.Provider,
+				"retries", job.Retries,
+				"max_retries", MaxRetries,
+				"error", err)
+
+			// Re-enqueue with delay
+			time.Sleep(RetryDelay)
+			data, _ := json.Marshal(job)
+			w.Redis.LPush(ctx, WebhookQueueKey, data)
+		} else {
+			util.Logger.Error("Job failed after max retries, moving to DLQ",
+				"provider", job.Provider,
+				"retries", job.Retries,
+				"error", err)
+			// TODO: Move to Dead Letter Queue
+		}
+	}
+}
+
+func (w *Worker) handleJob(ctx context.Context, job *WebhookJob) error {
 	// Check context before processing
 	select {
 	case <-ctx.Done():
-		fmt.Println("Job cancelled")
-		return
+		return fmt.Errorf("context cancelled")
 	default:
 	}
 
-	fmt.Printf("Processing webhook for %s: %s\n", job.Provider, string(job.Payload))
-	// Simulate processing time
+	util.Logger.Info("Processing webhook job",
+		"provider", job.Provider,
+		"retries", job.Retries,
+		"age_seconds", time.Since(job.CreatedAt).Seconds())
+
+	// Simulate processing
+	// In production: update transaction status, trigger notifications, etc.
 	time.Sleep(100 * time.Millisecond)
+
+	util.Logger.Info("Webhook job completed",
+		"provider", job.Provider)
+
+	return nil
+}
+
+// ReconciliationJob represents a reconciliation task
+type ReconciliationJob struct {
+	Provider       string    `json:"provider"`
+	StartTime      time.Time `json:"start_time"`
+	EndTime        time.Time `json:"end_time"`
+	TransactionIDs []string  `json:"transaction_ids,omitempty"`
+}
+
+// RunReconciliation performs reconciliation for a time range
+func (w *Worker) RunReconciliation(ctx context.Context, job *ReconciliationJob) error {
+	util.Logger.Info("Starting reconciliation",
+		"provider", job.Provider,
+		"start", job.StartTime,
+		"end", job.EndTime)
+
+	// In production:
+	// 1. Fetch transactions from DB in PENDING state
+	// 2. Query provider API for actual status
+	// 3. Update local DB if status changed
+	// 4. Generate discrepancy report
+
+	util.Logger.Info("Reconciliation completed",
+		"provider", job.Provider)
+
+	return nil
 }

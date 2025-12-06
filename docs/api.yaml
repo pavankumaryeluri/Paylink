@@ -1,57 +1,164 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
   title: PayLink API
+  description: |
+    PayLink is a multi-provider payment gateway backend that provides a unified API
+    for creating payment checkouts across multiple payment providers.
+    
+    ## Authentication
+    All API requests require an API key passed in the `X-Api-Key` header.
+    
+    ## Providers
+    Currently supported payment providers:
+    - **midtrans** - Midtrans Snap API
+    - **xendit** - Xendit Invoice API
+    
+    ## Idempotency
+    For POST requests, you can include an `Idempotency-Key` header to ensure
+    the request is processed only once.
   version: 1.0.0
-  description: Multi-provider payment gateway adapter.
+  contact:
+    name: PayLink Support
+    email: support@paylink.dev
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
 servers:
   - url: http://localhost:8080
-    description: Local Dev Server
+    description: Local Development
+  - url: https://api.paylink.dev
+    description: Production
+
+tags:
+  - name: Checkout
+    description: Payment checkout operations
+  - name: Webhooks
+    description: Provider webhook handling
+  - name: Transactions
+    description: Transaction management
+  - name: System
+    description: System health and metrics
+
 paths:
-  /checkout:
-    post:
-      summary: Create a new checkout session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                merchant_id:
-                  type: string
-                  format: uuid
-                amount:
-                  type: integer
-                  description: Amount in smallest currency unit (e.g. cents)
-                currency:
-                  type: string
-                  example: IDR
-                order_id:
-                  type: string
-                provider_preference:
-                  type: string
-                  enum: [midtrans, xendit, stripe]
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health Check
+      description: Returns the health status of the service
+      operationId: healthCheck
       responses:
         '200':
-          description: Checkout created
+          description: Service is healthy
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  checkout_url:
+                  status:
                     type: string
-                  provider_tx_id:
-                    type: string
-  /webhook/{provider}:
+                    example: ok
+              example:
+                status: ok
+
+  /metrics:
+    get:
+      tags:
+        - System
+      summary: Prometheus Metrics
+      description: Returns metrics in Prometheus exposition format
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP paylink_uptime_seconds Time since server start
+                # TYPE paylink_uptime_seconds gauge
+                paylink_uptime_seconds 3600.00
+
+  /v1/checkout:
     post:
-      summary: Handle webhook from provider
+      tags:
+        - Checkout
+      summary: Create Checkout
+      description: |
+        Creates a new payment checkout session with the specified provider.
+        Returns a checkout URL that the customer should be redirected to.
+      operationId: createCheckout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+            examples:
+              midtrans:
+                summary: Midtrans Checkout
+                value:
+                  merchant_id: "550e8400-e29b-41d4-a716-446655440000"
+                  amount: 150000
+                  currency: "IDR"
+                  order_id: "ORDER-123"
+                  provider_preference: "midtrans"
+              xendit:
+                summary: Xendit Checkout
+                value:
+                  merchant_id: "550e8400-e29b-41d4-a716-446655440000"
+                  amount: 250000
+                  currency: "IDR"
+                  order_id: "ORDER-456"
+                  provider_preference: "xendit"
+      responses:
+        '200':
+          description: Checkout created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+              example:
+                checkout_url: "https://app.sandbox.midtrans.com/snap/v3/redirection/snap_ORDER-123_150000"
+                provider_tx_id: "snap_ORDER-123_150000"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "Missing required fields"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/webhook/{provider}:
+    post:
+      tags:
+        - Webhooks
+      summary: Receive Webhook
+      description: |
+        Endpoint for receiving webhooks from payment providers.
+        Each provider has specific signature verification requirements.
+        
+        **Midtrans**: Signature in JSON body as `signature_key`
+        
+        **Xendit**: Token in `x-callback-token` header
+      operationId: receiveWebhook
       parameters:
         - name: provider
           in: path
           required: true
           schema:
             type: string
+            enum: [midtrans, xendit]
+          description: Payment provider name
       requestBody:
         required: true
         content:
@@ -59,6 +166,148 @@ paths:
             schema:
               type: object
               additionalProperties: true
+            examples:
+              midtrans:
+                summary: Midtrans Webhook
+                value:
+                  order_id: "ORDER-123"
+                  status_code: "200"
+                  gross_amount: "150000.00"
+                  signature_key: "abc123..."
+                  transaction_id: "tx-456"
+                  transaction_status: "settlement"
+              xendit:
+                summary: Xendit Webhook
+                value:
+                  id: "inv_123"
+                  external_id: "ORDER-456"
+                  status: "PAID"
+                  amount: 250000
       responses:
         '200':
-          description: Webhook received
+          description: Webhook received and queued
+        '400':
+          description: Invalid payload
+        '401':
+          description: Invalid signature
+        '404':
+          description: Unknown provider
+
+  /v1/tx/{id}:
+    get:
+      tags:
+        - Transactions
+      summary: Get Transaction
+      description: Retrieves the status and details of a transaction
+      operationId: getTransaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Transaction ID
+      responses:
+        '200':
+          description: Transaction details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                status: "pending"
+                provider: "midtrans"
+                amount: 150000
+                currency: "IDR"
+        '404':
+          description: Transaction not found
+
+components:
+  schemas:
+    CheckoutRequest:
+      type: object
+      required:
+        - merchant_id
+        - amount
+        - currency
+        - order_id
+        - provider_preference
+      properties:
+        merchant_id:
+          type: string
+          format: uuid
+          description: Merchant identifier
+        amount:
+          type: integer
+          minimum: 1
+          description: Amount in smallest currency unit (e.g., cents)
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code
+          example: IDR
+        order_id:
+          type: string
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Unique order identifier
+        provider_preference:
+          type: string
+          enum: [midtrans, xendit]
+          description: Preferred payment provider
+
+    CheckoutResponse:
+      type: object
+      properties:
+        checkout_url:
+          type: string
+          format: uri
+          description: URL to redirect customer for payment
+        provider_tx_id:
+          type: string
+          description: Provider's transaction identifier
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        merchant_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        provider_tx_id:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [pending, paid, failed, expired]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+
+security:
+  - ApiKeyAuth: []

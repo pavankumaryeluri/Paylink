@@ -7,7 +7,12 @@ import (
 
 	midtrans_adapter "github.com/vibeswithkk/paylink/internal/adapters/midtrans"
 	"github.com/vibeswithkk/paylink/internal/models"
+	"github.com/vibeswithkk/paylink/internal/util"
 )
+
+func init() {
+	util.InitLogger()
+}
 
 func TestCreatePayment(t *testing.T) {
 	adapter := midtrans_adapter.NewAdapter("test-server-key")
@@ -31,6 +36,36 @@ func TestCreatePayment(t *testing.T) {
 
 	if url == "" {
 		t.Error("Expected non-empty checkout URL")
+	}
+}
+
+func TestCreatePaymentValidation(t *testing.T) {
+	adapter := midtrans_adapter.NewAdapter("test-server-key")
+
+	// Test nil transaction
+	_, _, err := adapter.CreatePayment(context.Background(), nil)
+	if err == nil {
+		t.Error("Expected error for nil transaction")
+	}
+
+	// Test zero amount
+	tx := &models.Transaction{
+		Amount:       0,
+		ProviderTxID: "order-123",
+	}
+	_, _, err = adapter.CreatePayment(context.Background(), tx)
+	if err == nil {
+		t.Error("Expected error for zero amount")
+	}
+
+	// Test empty order ID
+	tx = &models.Transaction{
+		Amount:       100000,
+		ProviderTxID: "",
+	}
+	_, _, err = adapter.CreatePayment(context.Background(), tx)
+	if err == nil {
+		t.Error("Expected error for empty order ID")
 	}
 }
 
@@ -59,6 +94,28 @@ func TestVerifySignature(t *testing.T) {
 	}
 }
 
+func TestVerifySignatureEmptyPayload(t *testing.T) {
+	adapter := midtrans_adapter.NewAdapter("test-server-key")
+
+	req := httptest.NewRequest("POST", "/webhook", nil)
+	_, _, err := adapter.VerifySignature(req, []byte{})
+
+	if err == nil {
+		t.Error("Expected error for empty payload")
+	}
+}
+
+func TestVerifySignatureInvalidJSON(t *testing.T) {
+	adapter := midtrans_adapter.NewAdapter("test-server-key")
+
+	req := httptest.NewRequest("POST", "/webhook", nil)
+	_, _, err := adapter.VerifySignature(req, []byte("not json"))
+
+	if err == nil {
+		t.Error("Expected error for invalid JSON")
+	}
+}
+
 func TestGetTransactionStatus(t *testing.T) {
 	adapter := midtrans_adapter.NewAdapter("test-server-key")
 
@@ -70,5 +127,15 @@ func TestGetTransactionStatus(t *testing.T) {
 
 	if status == "" {
 		t.Error("Expected non-empty status")
+	}
+}
+
+func TestGetTransactionStatusEmpty(t *testing.T) {
+	adapter := midtrans_adapter.NewAdapter("test-server-key")
+
+	_, err := adapter.GetTransactionStatus(context.Background(), "")
+
+	if err == nil {
+		t.Error("Expected error for empty transaction ID")
 	}
 }
