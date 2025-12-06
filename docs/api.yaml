@@ -1,0 +1,64 @@
+openapi: 3.0.0
+info:
+  title: PayLink API
+  version: 1.0.0
+  description: Multi-provider payment gateway adapter.
+servers:
+  - url: http://localhost:8080
+    description: Local Dev Server
+paths:
+  /checkout:
+    post:
+      summary: Create a new checkout session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                merchant_id:
+                  type: string
+                  format: uuid
+                amount:
+                  type: integer
+                  description: Amount in smallest currency unit (e.g. cents)
+                currency:
+                  type: string
+                  example: IDR
+                order_id:
+                  type: string
+                provider_preference:
+                  type: string
+                  enum: [midtrans, xendit, stripe]
+      responses:
+        '200':
+          description: Checkout created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  checkout_url:
+                    type: string
+                  provider_tx_id:
+                    type: string
+  /webhook/{provider}:
+    post:
+      summary: Handle webhook from provider
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Webhook received

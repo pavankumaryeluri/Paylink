@@ -1,0 +1,60 @@
+# Stage 1: Build C++ Crypto Library
+FROM ubuntu:22.04 AS cpp-builder
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    libssl-dev \
+    git
+
+WORKDIR /app/crypto_cpp
+COPY crypto_cpp/ .
+
+RUN mkdir build && cd build && \
+    cmake .. && \
+    make && \
+    make install
+
+# Stage 2: Build Go Application
+FROM golang:1.22 AS go-builder
+
+# Install C++ lib dependencies for linking time
+COPY --from=cpp-builder /usr/local/lib/libpaycrypto.so /usr/local/lib/
+COPY --from=cpp-builder /usr/local/include/paycrypto.h /usr/local/include/
+
+# Update ld cache
+RUN ldconfig
+
+WORKDIR /app
+
+# Dependencies
+COPY go.mod go.sum* ./
+RUN go mod download
+
+# Source code
+COPY . .
+
+# Build Server
+RUN CGO_ENABLED=1 go build -o paylink-server ./cmd/server
+
+# Stage 3: Runtime
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \
+    libssl-dev \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=cpp-builder /usr/local/lib/libpaycrypto.so /usr/lib/libpaycrypto.so
+RUN ldconfig
+
+COPY --from=go-builder /app/paylink-server /app/paylink-server
+COPY .env.example /app/.env
+
+# Create non-root user
+RUN useradd -m paylink
+USER paylink
+
+EXPOSE 8080
+CMD ["/app/paylink-server"]

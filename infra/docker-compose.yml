@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  paylink:
+    build:
+      context: ../
+      dockerfile: infra/Dockerfile.server
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../.env
+    depends_on:
+      - db
+      - redis
+    restart: always
+
+  worker:
+    build:
+      context: ../
+      dockerfile: infra/Dockerfile.worker
+    env_file:
+      - ../.env
+    depends_on:
+      - db
+      - redis
+    restart: always
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-paylink}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+      POSTGRES_DB: ${DB_NAME:-paylink}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:
